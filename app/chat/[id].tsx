@@ -4,6 +4,7 @@ import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, 
 import { Button } from "../../src/components/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { useLanguage } from "../../src/context/LanguageContext";
+import { isMissingSizeColumn } from "../../src/lib/listings";
 import { supabase } from "../../src/lib/supabase";
 import { shared, theme } from "../../src/styles/theme";
 
@@ -50,8 +51,12 @@ export default function ChatDetailScreen() {
       }
 
       const otherId = convo.buyer_id === user!.id ? convo.seller_id : convo.buyer_id;
-      const [{ data: listingData }, { data: profileData }, { data: messageData }] = await Promise.all([
-        supabase.from("listings").select("id, title, price, city, image_url, image_urls").eq("id", convo.listing_id).maybeSingle(),
+      let listingResult = await supabase.from("listings").select("id, title, price, city, image_url, image_urls, size").eq("id", convo.listing_id).maybeSingle();
+      if (listingResult.error && isMissingSizeColumn(listingResult.error)) {
+        listingResult = await supabase.from("listings").select("id, title, price, city, image_url, image_urls").eq("id", convo.listing_id).maybeSingle();
+      }
+
+      const [{ data: profileData }, { data: messageData }] = await Promise.all([
         supabase.from("profiles").select("id, display_name, business_name").eq("id", otherId).maybeSingle(),
         supabase
           .from("messages")
@@ -63,7 +68,7 @@ export default function ChatDetailScreen() {
 
       if (alive) {
         setConversation(convo);
-        setListing(listingData || null);
+        setListing(listingResult.data || null);
         setOtherProfile(profileData || null);
         setMessages(Array.isArray(messageData) ? (messageData as Message[]) : []);
         setLoading(false);

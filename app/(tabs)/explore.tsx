@@ -1,29 +1,51 @@
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ListingCard } from "../../src/components/ListingCard";
 import { useAuth } from "../../src/context/AuthContext";
-import { categories, Listing, localShowcase } from "../../src/lib/listings";
+import { useLanguage } from "../../src/context/LanguageContext";
+import { categories, categoryDisplayLabel, isMissingSizeColumn, Listing, listingSelect, listingSelectWithoutSize, localShowcase } from "../../src/lib/listings";
 import { supabase } from "../../src/lib/supabase";
 import { shared, theme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
 
 export default function ExploreScreen() {
+  const params = useLocalSearchParams<{ category?: string; query?: string }>();
   const { user } = useAuth();
+  const { language, t } = useLanguage();
   const [listings, setListings] = useState<Listing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("moda");
 
+  useEffect(() => {
+    if (typeof params.query === "string") setQuery(params.query);
+    if (typeof params.category === "string" && categories.some((item) => item.value === params.category)) {
+      setCategory(params.category);
+    }
+  }, [params.category, params.query]);
+
   const loadListings = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const listingsResult = await supabase
       .from("listings")
-      .select("id, created_at, title, price, image_url, city, description, condition, category, image_urls, user_id, seller_name, status, sold_at")
+      .select(listingSelect)
       .order("created_at", { ascending: false });
+    let data: any = listingsResult.data;
+    let error: any = listingsResult.error;
+
+    if (error && isMissingSizeColumn(error)) {
+      const retry = await supabase
+        .from("listings")
+        .select(listingSelectWithoutSize)
+        .order("created_at", { ascending: false });
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error || !Array.isArray(data) || data.length === 0) {
+      if (error) console.error("Explore listings load failed:", error);
       setListings(localShowcase);
     } else {
       setListings(data as Listing[]);
@@ -50,6 +72,11 @@ export default function ExploreScreen() {
 
   async function toggleFavorite(listingId: string) {
     if (!user?.id) return;
+    const listing = listings.find((item) => String(item.id) === String(listingId));
+    if (listing?.user_id && listing.user_id === user.id) {
+      Alert.alert("Favoritos", "No puedes guardar tus propios anuncios.");
+      return;
+    }
     const isFavorite = favoriteIds.has(listingId);
     setFavoriteIds((prev) => {
       const next = new Set(prev);
@@ -58,12 +85,29 @@ export default function ExploreScreen() {
       return next;
     });
 
-    const query = supabase.from("favorites");
+    const favoritesQuery = supabase.from("favorites");
     const { error } = isFavorite
-      ? await query.delete().eq("user_id", user.id).eq("listing_id", listingId)
-      : await query.insert({ user_id: user.id, listing_id: listingId });
+      ? await favoritesQuery.delete().eq("user_id", user.id).eq("listing_id", listingId)
+      : await addFavorite(user.id, listingId);
 
-    if (error) loadFavorites();
+    if (error) {
+      Alert.alert("Favoritos", error.message || "No se pudo actualizar el favorito.");
+      loadFavorites();
+    }
+  }
+
+  async function addFavorite(userId: string, listingId: string) {
+    const existing = await supabase
+      .from("favorites")
+      .select("listing_id")
+      .eq("user_id", userId)
+      .eq("listing_id", listingId)
+      .maybeSingle();
+
+    if (existing.error) return { error: existing.error };
+    if (existing.data) return { error: null };
+
+    return supabase.from("favorites").insert({ user_id: userId, listing_id: listingId });
   }
 
   const visibleListings = useMemo(() => {
@@ -72,7 +116,7 @@ export default function ExploreScreen() {
       .filter((item) => String(item.category || "") === category)
       .filter((item) => {
         if (!q) return true;
-        return [item.title, item.description, item.city, item.condition, item.seller_name]
+        return [item.title, item.description, item.city, item.condition, item.size, item.seller_name]
           .join(" ")
           .toLowerCase()
           .includes(q);
@@ -88,19 +132,19 @@ export default function ExploreScreen() {
       <View style={styles.head}>
         <View style={{ flex: 1 }}>
           <Text style={shared.eyebrow}>Reuso CDMX</Text>
-          <Text style={shared.h1}>Explora piezas cerca de ti.</Text>
-          <Text style={shared.body}>Busca por barrio, estilo o pieza. Moda circular, muebles y hallazgos locales.</Text>
+          <Text style={shared.h1}>{t("exploreTitle")}</Text>
+          <Text style={shared.body}>{t("exploreBody")}</Text>
         </View>
         <View style={styles.pulse}>
           <Text style={styles.pulseNumber}>{visibleListings.length}</Text>
-          <Text style={styles.pulseLabel}>piezas</Text>
+          <Text style={styles.pulseLabel}>{t("pieces")}</Text>
         </View>
       </View>
 
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Buscar en Reuso"
+        placeholder={t("search")}
         placeholderTextColor="rgba(21,17,17,0.38)"
         style={shared.input}
       />
@@ -109,7 +153,7 @@ export default function ExploreScreen() {
         {categories.map((item) => (
           <Button
             key={item.value}
-            label={item.label}
+            label={categoryDisplayLabel(item.value, language)}
             variant={category === item.value ? "primary" : "secondary"}
             onPress={() => setCategory(item.value)}
             style={styles.categoryButton}
@@ -120,14 +164,14 @@ export default function ExploreScreen() {
       {loading ? (
         <View style={styles.statusCard}>
           <ActivityIndicator color={theme.colors.primary} />
-          <Text style={shared.muted}>Cargando anuncios...</Text>
+          <Text style={shared.muted}>{t("loadingListings")}</Text>
         </View>
       ) : null}
 
       {!loading && visibleListings.length === 0 ? (
         <View style={styles.statusCard}>
-          <Text style={styles.emptyTitle}>No encontramos piezas aqui.</Text>
-          <Text style={shared.muted}>Prueba otra categoria o limpia la busqueda.</Text>
+          <Text style={styles.emptyTitle}>{t("noListingsTitle")}</Text>
+          <Text style={shared.muted}>{t("noListingsBody")}</Text>
         </View>
       ) : null}
 
@@ -136,8 +180,8 @@ export default function ExploreScreen() {
           <ListingCard
             key={item.id}
             item={item}
-            isFavorite={favoriteIds.has(String(item.id))}
-            onToggleFavorite={user?.id ? toggleFavorite : undefined}
+            isFavorite={item.user_id !== user?.id && favoriteIds.has(String(item.id))}
+            onToggleFavorite={user?.id && item.user_id !== user.id ? toggleFavorite : undefined}
           />
         ))}
       </View>

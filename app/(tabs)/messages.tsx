@@ -4,7 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { Button } from "../../src/components/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { useLanguage } from "../../src/context/LanguageContext";
-import { formatMXN } from "../../src/lib/listings";
+import { formatMXN, isMissingSizeColumn, listingImages } from "../../src/lib/listings";
 import { supabase } from "../../src/lib/supabase";
 import { shared, theme } from "../../src/styles/theme";
 
@@ -84,10 +84,23 @@ export default function MessagesScreen() {
 
         let listingMap: Record<string, any> = {};
         if (listingIds.length) {
-          const { data: listingData } = await supabase
+          const listingsResult = await supabase
             .from("listings")
-            .select("id, title, price, city, image_url, image_urls")
+            .select("id, title, price, city, image_url, image_urls, size")
             .in("id", listingIds);
+          let listingData: any = listingsResult.data;
+          let listingError: any = listingsResult.error;
+
+          if (listingError && isMissingSizeColumn(listingError)) {
+            const retry = await supabase
+              .from("listings")
+              .select("id, title, price, city, image_url, image_urls")
+              .in("id", listingIds);
+            listingData = retry.data;
+            listingError = retry.error;
+          }
+
+          if (listingError) console.error("Messages listing load failed:", listingError);
           for (const listing of listingData || []) listingMap[listing.id] = listing;
         }
 
@@ -112,12 +125,12 @@ export default function MessagesScreen() {
       conversations.map((conversation) => {
         const otherId = conversation.buyer_id === user?.id ? conversation.seller_id : conversation.buyer_id;
         const listing = listings[conversation.listing_id];
-        const image = Array.isArray(listing?.image_urls) ? listing.image_urls[0] : listing?.image_url;
+        const image = listingImages(listing)[0];
         return {
           id: conversation.id,
           otherName: displayName(profiles[otherId], language === "en" ? "Seller" : "Vendedor"),
           listingTitle: listing?.title || (language === "en" ? "Listing" : "Anuncio"),
-          listingMeta: [formatMXN(listing?.price), listing?.city].filter(Boolean).join(" / "),
+          listingMeta: [formatMXN(listing?.price), listing?.city, listing?.size].filter(Boolean).join(" / "),
           image,
           lastText: lastMessages[conversation.id]?.body || (language === "en" ? "No messages yet" : "Sin mensajes todavia"),
           when: when(lastMessages[conversation.id]?.created_at || conversation.last_message_at),

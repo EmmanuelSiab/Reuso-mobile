@@ -2,32 +2,48 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button } from "../../src/components/Button";
-import { formatMXN, Listing, listingImages, publicSellerName } from "../../src/lib/listings";
+import { categoryDisplayLabel, formatMXN, isMissingSizeColumn, Listing, listingImages, listingSelect, listingSelectWithoutSize, publicSellerName } from "../../src/lib/listings";
 import { supabase } from "../../src/lib/supabase";
 import { shared, theme } from "../../src/styles/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useLanguage } from "../../src/context/LanguageContext";
 
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { language, t } = useLanguage();
   const [listing, setListing] = useState<Listing | null>(null);
   const [sellerProfile, setSellerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [chatLoading, setChatLoading] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
 
     async function load() {
       setLoading(true);
-      const { data, error } = await supabase
+      const listingResult = await supabase
         .from("listings")
-        .select("id, created_at, title, price, image_url, city, description, condition, category, image_urls, user_id, seller_name, status, sold_at")
+        .select(listingSelect)
         .eq("id", id)
         .single();
+      let data: any = listingResult.data;
+      let error: any = listingResult.error;
+
+      if (error && isMissingSizeColumn(error)) {
+        const retry = await supabase
+          .from("listings")
+          .select(listingSelectWithoutSize)
+          .eq("id", id)
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (!alive) return;
+      setImageFailed(false);
       if (error || !data) {
         setListing(null);
         setLoading(false);
@@ -54,7 +70,7 @@ export default function ListingDetailScreen() {
   }, [id]);
 
   const images = useMemo(() => listingImages(listing), [listing]);
-  const sellerName = publicSellerName(sellerProfile, listing?.seller_name || "Vendedor local");
+  const sellerName = publicSellerName(sellerProfile, listing?.seller_name || t("localSeller"));
   const isOwner = Boolean(user?.id && listing?.user_id && user.id === listing.user_id);
   const isSold = String(listing?.status || "").toLowerCase() === "sold" || Boolean(listing?.sold_at);
 
@@ -117,45 +133,51 @@ export default function ListingDetailScreen() {
   return (
     <ScrollView style={shared.screen} contentContainerStyle={shared.content}>
       <View style={styles.gallery}>
-        {images[0] ? (
-          <Image source={{ uri: images[0] }} style={styles.heroImage} resizeMode="cover" />
+        {images[0] && !imageFailed ? (
+          <Image
+            source={{ uri: images[0] }}
+            style={styles.heroImage}
+            resizeMode="cover"
+            onError={() => setImageFailed(true)}
+          />
         ) : (
           <View style={styles.emptyImage}>
             <Image source={require("../../assets/reuso-logo-transparent.png")} style={styles.emptyLogo} resizeMode="contain" />
+            <Text style={styles.emptyImageText}>{t("noImage")}</Text>
           </View>
         )}
       </View>
 
       <View style={styles.metaRow}>
         <Text style={styles.price}>{formatMXN(listing.price)}</Text>
-        {isSold ? <Text style={styles.sold}>Vendido</Text> : null}
+        {isSold ? <Text style={styles.sold}>{t("soldLabel")}</Text> : null}
       </View>
 
-      <Text style={shared.h1}>{listing.title || "Sin titulo"}</Text>
+      <Text style={shared.h1}>{listing.title || t("noTitle")}</Text>
       <Text style={shared.muted}>
-        {listing.city || "CDMX"} · {listing.category || "Reuso"} · {listing.condition || "Estado no especificado"}
+        {[listing.city || "CDMX", categoryDisplayLabel(listing.category, language), listing.size, listing.condition || (language === "en" ? "Condition not specified" : "Estado no especificado")].filter(Boolean).join(" · ")}
       </Text>
 
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Vendedor</Text>
+        <Text style={styles.panelTitle}>{t("seller")}</Text>
         <Text style={shared.body}>{sellerName}</Text>
-        <Text style={shared.muted}>Por privacidad, Reuso no muestra emails publicamente.</Text>
+        <Text style={shared.muted}>{t("privacySellerEmail")}</Text>
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Descripcion</Text>
+        <Text style={styles.panelTitle}>{t("description")}</Text>
         <Text style={shared.body}>{listing.description || "--"}</Text>
       </View>
 
       <View style={styles.safeNote}>
-        <Text style={styles.safeTitle}>Mensaje primero, entrega local despues.</Text>
-        <Text style={shared.muted}>Usa Reuso antes de acordar punto de entrega y reporta cualquier cosa rara.</Text>
+        <Text style={styles.safeTitle}>{t("safetyTitle")}</Text>
+        <Text style={shared.muted}>{t("safetyBody")}</Text>
       </View>
 
       {isOwner ? (
-        <Button label="Este anuncio es tuyo" variant="secondary" disabled />
+        <Button label={t("ownListing")} variant="secondary" disabled />
       ) : (
-        <Button label={isSold ? "Vendido" : "Contactar por Reuso"} loading={chatLoading} disabled={isSold} onPress={startChat} />
+        <Button label={isSold ? t("soldLabel") : t("contactViaReuso")} loading={chatLoading} disabled={isSold} onPress={startChat} />
       )}
     </ScrollView>
   );
@@ -167,14 +189,14 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     width: "100%",
-    aspectRatio: 4 / 5,
-    borderRadius: theme.radius,
+    aspectRatio: 1,
+    borderRadius: 14,
     backgroundColor: theme.colors.surfaceSoft,
   },
   emptyImage: {
     width: "100%",
-    aspectRatio: 4 / 5,
-    borderRadius: theme.radius,
+    minHeight: 180,
+    borderRadius: 14,
     borderColor: theme.colors.border,
     borderWidth: 1,
     backgroundColor: theme.colors.surface,
@@ -182,9 +204,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyLogo: {
-    width: 128,
-    height: 128,
-    opacity: 0.36,
+    width: 76,
+    height: 76,
+    opacity: 0.28,
+  },
+  emptyImageText: {
+    marginTop: 8,
+    color: theme.colors.muted,
+    fontSize: 14,
+    fontWeight: "900",
   },
   metaRow: {
     flexDirection: "row",

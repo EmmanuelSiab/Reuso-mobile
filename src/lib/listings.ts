@@ -8,9 +8,10 @@ export type Listing = {
   price?: number | null;
   category?: string | null;
   condition?: string | null;
+  size?: string | null;
   city?: string | null;
   image_url?: string | null;
-  image_urls?: string[] | null;
+  image_urls?: string[] | string | null;
   user_id?: string | null;
   seller_name?: string | null;
   status?: string | null;
@@ -26,6 +27,18 @@ export const categories = [
   { value: "electronica", label: "Electronica", hint: "Gadgets verificados" },
 ];
 
+export const categoryTranslations: Record<string, { es: string; en: string }> = {
+  moda: { es: "Moda", en: "Fashion" },
+  accesorios: { es: "Accesorios", en: "Accessories" },
+  muebles: { es: "Muebles", en: "Furniture" },
+  electronica: { es: "Electronica", en: "Electronics" },
+};
+
+export function categoryDisplayLabel(value?: string | null, language: "es" | "en" = "es") {
+  const key = String(value || "").trim();
+  return categoryTranslations[key]?.[language] || categoryLabel(value);
+}
+
 export const conditions = [
   "Nuevo",
   "Como nuevo",
@@ -35,6 +48,23 @@ export const conditions = [
   "Aceptable",
 ];
 
+export const standardSizes = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "Otro"];
+
+export function categoryNeedsSize(category?: string | null) {
+  return ["moda", "accesorios"].includes(String(category || "").trim());
+}
+
+export const listingSelect =
+  "id, created_at, title, price, image_url, image_urls, city, category, condition, size, description, user_id, seller_name, status, sold_at";
+
+export const listingSelectWithoutSize =
+  "id, created_at, title, price, image_url, image_urls, city, category, condition, description, user_id, seller_name, status, sold_at";
+
+export function isMissingSizeColumn(error: any) {
+  const msg = String(error?.message || error?.details || "");
+  return error?.code === "42703" || (msg.includes("size") && msg.toLowerCase().includes("column"));
+}
+
 export const localShowcase: Listing[] = [
   {
     id: "local-1",
@@ -43,6 +73,7 @@ export const localShowcase: Listing[] = [
     price: 720,
     city: "Roma Norte",
     condition: "Muy buen estado",
+    size: "M",
     category: "moda",
     description: "Mezclilla pesada, corte relajado. Entrega cerca de Alvaro Obregon.",
     seller_name: "Casa Circula",
@@ -55,6 +86,7 @@ export const localShowcase: Listing[] = [
     price: 980,
     city: "Juarez",
     condition: "Buen estado",
+    size: "L",
     category: "moda",
     description: "Suela firme, look western discreto. Ideales para fin de semana.",
     seller_name: "Valeria",
@@ -67,6 +99,7 @@ export const localShowcase: Listing[] = [
     price: 420,
     city: "Condesa",
     condition: "Como nuevo",
+    size: "M",
     category: "moda",
     description: "Tela ligera, lista para usar. Sin detalles visibles.",
     seller_name: "Archivo Norte",
@@ -79,6 +112,7 @@ export const localShowcase: Listing[] = [
     price: 280,
     city: "Coyoacan",
     condition: "Buen estado",
+    size: "90 cm",
     category: "accesorios",
     description: "Hebilla metalica, piel suave, talla ajustable.",
     seller_name: "Mateo",
@@ -91,6 +125,7 @@ export const localShowcase: Listing[] = [
     price: 540,
     city: "Narvarte",
     condition: "Muy buen estado",
+    size: "XL",
     category: "moda",
     description: "Algodon grueso, fit amplio, perfecto para capas.",
     seller_name: "Nadia",
@@ -110,10 +145,28 @@ export function formatMXN(value?: number | null) {
 export function listingImages(listing?: Listing | null) {
   if (!listing) return [];
   if (Array.isArray(listing.image_urls) && listing.image_urls.length > 0) {
-    return listing.image_urls.map((x) => String(x || "").trim()).filter(Boolean);
+    const urls = listing.image_urls.map((x) => String(x || "").trim()).filter(Boolean);
+    if (urls.length) return urls;
+  }
+  if (typeof listing.image_urls === "string") {
+    try {
+      const parsed = JSON.parse(listing.image_urls);
+      if (Array.isArray(parsed)) {
+        const urls = parsed.map((x) => String(x || "").trim()).filter(Boolean);
+        if (urls.length) return urls;
+      }
+    } catch {
+      const raw = String(listing.image_urls || "").trim();
+      if (raw) return [raw];
+    }
   }
   const single = String(listing.image_url || "").trim();
   return single ? [single] : [];
+}
+
+export function categoryLabel(value?: string | null) {
+  const hit = categories.find((item) => item.value === String(value || "").trim());
+  return hit?.label || value || "Reuso";
 }
 
 export function publicSellerName(profile: any, fallback = "Vendedor local") {

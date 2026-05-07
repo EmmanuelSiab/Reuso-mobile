@@ -31,7 +31,7 @@ export const shared = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 36,
+    paddingBottom: 132,
   },
   eyebrow: {
     color: theme.colors.primaryDark,

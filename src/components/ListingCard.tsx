@@ -1,6 +1,8 @@
 import { Link } from "expo-router";
+import { useState } from "react";
 import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, View } from "react-native";
-import { formatMXN, Listing, listingImages } from "../lib/listings";
+import { useLanguage } from "../context/LanguageContext";
+import { categoryDisplayLabel, formatMXN, Listing, listingImages } from "../lib/listings";
 import { shared, theme } from "../styles/theme";
 
 function coverSource(item: Listing): ImageSourcePropType | null {
@@ -18,7 +20,9 @@ export function ListingCard({
   isFavorite?: boolean;
   onToggleFavorite?: (id: string) => void;
 }) {
+  const { language, t } = useLanguage();
   const source = coverSource(item);
+  const [imageFailed, setImageFailed] = useState(false);
   const isSold = String(item.status || "").toLowerCase() === "sold" || Boolean(item.sold_at);
   const href = item.previewOnly ? "/explore" : (`/listing/${item.id}` as const);
 
@@ -26,11 +30,12 @@ export function ListingCard({
     <Link href={href} asChild>
       <Pressable style={[styles.card, isSold && styles.sold]}>
         <View style={styles.media}>
-          {source ? (
-            <Image source={source} style={styles.image} resizeMode="cover" />
+          {source && !imageFailed ? (
+            <Image source={source} style={styles.image} resizeMode="cover" onError={() => setImageFailed(true)} />
           ) : (
             <View style={styles.empty}>
               <Image source={require("../../assets/reuso-logo-transparent.png")} style={styles.emptyLogo} resizeMode="contain" />
+              <Text style={styles.emptyText}>{t("noImage")}</Text>
             </View>
           )}
           <View style={styles.pricePill}>
@@ -38,7 +43,7 @@ export function ListingCard({
           </View>
           {isSold ? (
             <View style={styles.soldPill}>
-              <Text style={styles.soldText}>Vendido</Text>
+              <Text style={styles.soldText}>{t("soldLabel")}</Text>
             </View>
           ) : null}
           {onToggleFavorite && !item.previewOnly ? (
@@ -56,10 +61,10 @@ export function ListingCard({
         </View>
         <View style={styles.body}>
           <Text numberOfLines={2} style={styles.title}>
-            {item.title || "Sin titulo"}
+            {item.title || t("noTitle")}
           </Text>
           <Text numberOfLines={1} style={shared.muted}>
-            {item.city || "CDMX"} · {item.condition || item.category || "Reuso"}
+            {[item.city || "CDMX", item.size, item.condition || categoryDisplayLabel(item.category, language)].filter(Boolean).join(" · ")}
           </Text>
           {item.description ? (
             <Text numberOfLines={2} style={styles.description}>
@@ -68,9 +73,9 @@ export function ListingCard({
           ) : null}
           <View style={styles.footer}>
             <Text numberOfLines={1} style={styles.seller}>
-              {item.seller_name || "Vendedor local"}
+              {item.seller_name || t("localSeller")}
             </Text>
-            <Text style={styles.cta}>{item.previewOnly ? "Vista previa" : "Ver"}</Text>
+            <Text style={styles.cta}>{item.previewOnly ? t("preview") : t("view")}</Text>
           </View>
         </View>
       </Pressable>
@@ -105,6 +110,12 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     opacity: 0.36,
+  },
+  emptyText: {
+    marginTop: 8,
+    color: theme.colors.muted,
+    fontSize: 13,
+    fontWeight: "900",
   },
   pricePill: {
     position: "absolute",
