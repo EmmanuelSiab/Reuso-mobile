@@ -59,7 +59,15 @@ export default function AccountTypeScreen() {
               business_category: null,
             };
 
-      const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { error } = existingProfile?.id
+        ? await supabase.from("profiles").update(payload).eq("id", user.id)
+        : await supabase.from("profiles").insert(payload);
       if (error) throw error;
       await refreshProfile(user.id);
       router.replace("/explore");

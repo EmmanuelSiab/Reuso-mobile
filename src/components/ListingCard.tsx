@@ -9,7 +9,15 @@ function coverSource(item: Listing): ImageSourcePropType | null {
   return url ? { uri: url } : null;
 }
 
-export function ListingCard({ item }: { item: Listing }) {
+export function ListingCard({
+  item,
+  isFavorite = false,
+  onToggleFavorite,
+}: {
+  item: Listing;
+  isFavorite?: boolean;
+  onToggleFavorite?: (id: string) => void;
+}) {
   const source = coverSource(item);
   const isSold = String(item.status || "").toLowerCase() === "sold" || Boolean(item.sold_at);
   const href = item.previewOnly ? "/explore" : (`/listing/${item.id}` as const);
@@ -32,6 +40,18 @@ export function ListingCard({ item }: { item: Listing }) {
             <View style={styles.soldPill}>
               <Text style={styles.soldText}>Vendido</Text>
             </View>
+          ) : null}
+          {onToggleFavorite && !item.previewOnly ? (
+            <Pressable
+              style={styles.favorite}
+              onPress={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onToggleFavorite(String(item.id));
+              }}
+            >
+              <Text style={styles.favoriteText}>{isFavorite ? "♥" : "♡"}</Text>
+            </Pressable>
           ) : null}
         </View>
         <View style={styles.body}>
@@ -112,6 +132,25 @@ const styles = StyleSheet.create({
   soldText: {
     color: "#ffffff",
     fontSize: 12,
+    fontWeight: "900",
+  },
+  favorite: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,59,48,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  favoriteText: {
+    color: theme.colors.primary,
+    fontSize: 24,
+    lineHeight: 26,
     fontWeight: "900",
   },
   body: {

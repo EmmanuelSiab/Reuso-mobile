@@ -29,4 +29,15 @@ The app reuses the website Supabase tables and fields: `listings`, `profiles`, `
 - Email/password auth uses Supabase Auth.
 - Profile completion mirrors the web app: account type plus display name or business name.
 - Listing creation supports Expo Image Picker and Supabase Storage upload in Expo Go.
-- Chat CTA creates or opens a conversation record when the existing chat tables are available, then shows a clean placeholder because full mobile chat UI is outside this first MVP.
+- Chat includes an inbox and conversation screen using the existing `conversations` and `messages` tables.
+- Profile includes current user info, own listings, favorites, and logout.
+
+## Supabase permissions
+
+If onboarding shows `permission denied for table profiles`, apply:
+
+```text
+supabase/migrations/20260507143000_mobile_app_grants_and_policies.sql
+```
+
+That migration grants Data API access and RLS policies for `profiles`, `listings`, `favorites`, `conversations`, and `messages`.

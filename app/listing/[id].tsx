@@ -84,12 +84,8 @@ export default function ListingDetailScreen() {
             .single()
         ).data?.id;
 
-      Alert.alert(
-        "Chat listo",
-        conversationId
-          ? "Se creo o encontro la conversacion. La pantalla de chat movil queda como siguiente paso."
-          : "No se pudo abrir el chat, intenta de nuevo."
-      );
+      if (conversationId) router.push(`/chat/${conversationId}`);
+      else Alert.alert("Chat", "No se pudo abrir el chat, intenta de nuevo.");
     } catch (error: any) {
       Alert.alert("No se pudo abrir el chat", error?.message || "Intenta de nuevo.");
     } finally {
