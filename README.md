@@ -17,7 +17,10 @@ Create `mobile/.env` with:
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=your-supabase-url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+EXPO_NO_DEPENDENCY_VALIDATION=1
 ```
+
+`EXPO_NO_DEPENDENCY_VALIDATION=1` keeps `expo start` from failing when the Expo CLI cannot reach Expo's online native-module metadata service. It does not change app runtime behavior.
 
 The app reuses the website Supabase tables and fields: `listings`, `profiles`, `favorites`, and `conversations`. Image upload targets the existing `listing-images` bucket with paths like `userId/timestamp-random.ext`.
 
